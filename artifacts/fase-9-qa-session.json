@@ -5,18 +5,18 @@
   "viewport": "960x540",
   "backend": "webgpu",
   "fps": 59.7,
-  "frameGapMaxMs": 21,
-  "heapDeltaMB": 1.3,
+  "frameGapMaxMs": 23,
+  "heapDeltaMB": -12.1,
   "events": [
     {
       "type": "debug",
       "text": "[vite] connecting...",
-      "t": 1057
+      "t": 1095
     },
     {
       "type": "debug",
       "text": "[vite] connected.",
-      "t": 1060
+      "t": 1098
     }
   ],
   "checks": [
@@ -86,19 +86,29 @@
       "detail": "{\"menu\":false,\"hud\":false}"
     },
     {
+      "name": "F enciende y apaga la linterna",
+      "ok": true,
+      "detail": "false → true → false"
+    },
+    {
+      "name": "HUD refleja la linterna",
+      "ok": true,
+      "detail": "«TORCH OFF»"
+    },
+    {
       "name": "audio desbloqueado (contextState running)",
       "ok": true,
-      "detail": "{\"state\":\"running\",\"muted\":false,\"rain\":1.6348248720867895,\"wind\":0.12480765647799882,\"thunderActive\":1,\"burstMs\":3201}"
+      "detail": "{\"state\":\"running\",\"muted\":false,\"rain\":1.550497342111532,\"wind\":0.1287280236675199,\"thunderActive\":1,\"burstMs\":3201}"
     },
     {
       "name": "capa de lluvia con ganancia",
       "ok": true,
-      "detail": "rainLayers=1.6348248720867895"
+      "detail": "rainLayers=1.550497342111532"
     },
     {
       "name": "viento con ganancia",
       "ok": true,
-      "detail": "windGain=0.12480765647799882"
+      "detail": "windGain=0.1287280236675199"
     },
     {
       "name": "trueno disparado (?bolt=1)",
@@ -118,22 +128,22 @@
     {
       "name": "la sesión no se interrumpe (sin crash/recarga)",
       "ok": true,
-      "detail": "frame 400 → 11206"
+      "detail": "frame 431 → 11239"
     },
     {
       "name": "el bucle avanza durante el soak",
       "ok": true,
-      "detail": "frame 400 → 11206 · fps≈59.7 · stalls=0"
+      "detail": "frame 431 → 11239 · fps≈59.7 · stalls=0"
     },
     {
       "name": "reloj de viento (gust) vivo",
       "ok": true,
-      "detail": "gust=0.544"
+      "detail": "gust=0.545"
     },
     {
       "name": "streaming ha reescaneado",
       "ok": true,
-      "detail": "scans=1 lastScanMs=1.5"
+      "detail": "scans=1 lastScanMs=1.6"
     },
     {
       "name": "dispose() sin errores nuevos",

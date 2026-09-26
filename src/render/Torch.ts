@@ -22,13 +22,20 @@ declare module '../core/dbg' {
  * para todos, de modo que la lluvia iluminada y la niebla coinciden con el
  * haz que se ve en pantalla.
  *
- * `?torch=0` (default) no crea la luz: sin luz no hay permutación de shader
- * extra, y los uniformes quedan a 0 (el término se compila pero no se ve).
+ * `?torch` fija el **estado inicial** (default apagada) y la tecla `F` la
+ * alterna en runtime. La `SpotLight` existe siempre en el grafo (apagada =
+ * intensidad 0), porque añadir/quitar una luz recompila las permutaciones de
+ * todos los materiales: con la luz siempre presente, `F` es instantáneo. El
+ * coste es 1 spot sin sombra en las permutaciones (medido: dentro del ruido).
  * `?torchi=N` escala la intensidad, `?torchshadow=1` enciende su shadow map.
  */
 export interface TorchEx {
   /** Estado del interruptor (no es el mismo que `gain`, que es el uniforme). */
   readonly on: boolean;
+  /** Enciende/apaga (escribe `gain` y la intensidad del SpotLight). */
+  setOn(v: boolean): void;
+  /** Alterna y devuelve el estado nuevo. */
+  toggle(): boolean;
   /** Posición del foco en el mundo. */
   readonly pos: Node<'vec3'>;
   /** Dirección del haz en el mundo, normalizada. */
@@ -37,8 +44,8 @@ export interface TorchEx {
   readonly gain: Node<'float'>;
   /** `beamAt(wp)`: cono 0..1 del haz en un punto del mundo (0 si está apagada). */
   beamAt(wp: Node<'vec3'>): Node<'float'>;
-  /** `SpotLight` en el rig, o null si `?torch=0`. */
-  readonly light: THREE.SpotLight | null;
+  /** `SpotLight` en el rig (siempre presente; apagada = intensidad 0). */
+  readonly light: THREE.SpotLight;
   /** Escribe los uniforms desde el rig. Sin argumentos ni asignaciones. */
   update(): void;
   dispose(): void;
@@ -54,7 +61,8 @@ function dbgRef(): Dbg | null {
 }
 
 export function createTorch(rig: THREE.Object3D, quality: Quality): TorchEx {
-  const on = pbool('torch', false);
+  // Estado inicial por URL; `F` lo alterna desde `main.ts`.
+  let on = pbool('torch', false);
   const gain = uniform(on ? 1 : 0);
   const uPos = uniform(new THREE.Vector3());
   const uDir = uniform(new THREE.Vector3(0, 0, -1));
@@ -72,21 +80,6 @@ export function createTorch(rig: THREE.Object3D, quality: Quality): TorchEx {
     return cone.mul(fall).mul(gain);
   }
 
-  if (!on) {
-    const dbg = dbgRef();
-    if (dbg) dbg.torch = { on: false, light: false, shadow: false };
-    return {
-      on: false,
-      pos: uPos,
-      dir: uDir,
-      gain,
-      beamAt,
-      light: null,
-      update(): void {},
-      dispose(): void {},
-    };
-  }
-
   // Params de captura: `?torchi=N` MULTIPLICA la intensidad, `?torchangle=deg`
   // fija el medio cono, `?torchdecay=N` el exponente de caída y `?torchtilt=N`
   // la caída del objetivo por metro de alcance. Los cuatro existen por el bucle
@@ -95,9 +88,10 @@ export function createTorch(rig: THREE.Object3D, quality: Quality): TorchEx {
   const scale = Math.max(0, pnum('torchi', 1));
   const angle = Math.max(0.02, Math.min(1.5, pnum('torchangle', (TORCH.angle * 180) / Math.PI) * (Math.PI / 180)));
   const decay = Math.max(0, pnum('torchdecay', TORCH.decay));
+  const onIntensity = TORCH.intensity * scale;
   const light = new THREE.SpotLight(
     new THREE.Color(...TORCH.color),
-    TORCH.intensity * scale,
+    on ? onIntensity : 0,
     TORCH.distance,
     angle,
     TORCH.penumbra,
@@ -134,21 +128,35 @@ export function createTorch(rig: THREE.Object3D, quality: Quality): TorchEx {
   }
 
   const dbg = dbgRef();
-  if (dbg) {
-    dbg.torch = {
-      on: true,
-      light: true,
-      shadow,
-      intensity: light.intensity,
-      angle,
-      penumbra: TORCH.penumbra,
-      distance: TORCH.distance,
-      decay,
-      tilt,
-      cosIn: TORCH.cosIn,
-      cosOut: TORCH.cosOut,
-      falloff: TORCH.falloff,
-    };
+  const dbgTorch: Record<string, unknown> | null = dbg
+    ? {
+        on,
+        light: true,
+        shadow,
+        intensity: onIntensity,
+        angle,
+        penumbra: TORCH.penumbra,
+        distance: TORCH.distance,
+        decay,
+        tilt,
+        cosIn: TORCH.cosIn,
+        cosOut: TORCH.cosOut,
+        falloff: TORCH.falloff,
+      }
+    : null;
+  if (dbg && dbgTorch) dbg.torch = dbgTorch;
+
+  /** Interruptor: solo toca uniforms/intensidad (sin recompilar materiales). */
+  function setOn(v: boolean): void {
+    on = v;
+    gain.value = v ? 1 : 0;
+    light.intensity = v ? onIntensity : 0;
+    if (dbgTorch) dbgTorch.on = on;
+  }
+
+  function toggle(): boolean {
+    setOn(!on);
+    return on;
   }
 
   function update(): void {
@@ -168,5 +176,18 @@ export function createTorch(rig: THREE.Object3D, quality: Quality): TorchEx {
     light.shadow.dispose();
   }
 
-  return { on: true, pos: uPos, dir: uDir, gain, beamAt, light, update, dispose };
+  return {
+    get on(): boolean {
+      return on;
+    },
+    setOn,
+    toggle,
+    pos: uPos,
+    dir: uDir,
+    gain,
+    beamAt,
+    light,
+    update,
+    dispose,
+  };
 }

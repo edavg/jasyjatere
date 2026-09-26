@@ -91,6 +91,7 @@ export function createHud(deps: HudDeps): Hud {
   const windNum = need<HTMLSpanElement>('hudWindNum');
   const volEl = need<HTMLDivElement>('hudVol');
   const perfEl = need<HTMLDivElement>('hudPerf');
+  const torchEl = need<HTMLDivElement>('hudTorch');
   const statsEl = need<HTMLDivElement>('stats');
   const logEl = document.getElementById('debugLog');
   const debug = pbool('debug', false);
@@ -109,6 +110,7 @@ export function createHud(deps: HudDeps): Hud {
   let rainCells = -1;
   let windCells = -1;
   let volKey = -1;
+  let torchOn: boolean | null = null;
   let perfShown: unknown = null;
 
   function setVisible(v: boolean): void {
@@ -144,6 +146,15 @@ export function createHud(deps: HudDeps): Hud {
       windNum.textContent = fmt(w);
       flash(windBar);
     }
+    // Linterna (F): estado leído de __dbg.torch; parpadea al cambiar.
+    const torch = dbg.torch;
+    if (torch !== undefined && typeof torch.on === 'boolean' && torch.on !== torchOn) {
+      torchOn = torch.on;
+      torchEl.textContent = torchOn ? 'TORCH ON' : 'TORCH OFF';
+      torchEl.classList.toggle('hud-torch-on', torchOn);
+      flash(torchEl);
+    }
+
     // F9: resultado de ?perf=N (una sola vez; se compara por referencia).
     if (dbg.perf !== undefined && dbg.perf !== perfShown) {
       perfShown = dbg.perf;

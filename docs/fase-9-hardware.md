@@ -17,8 +17,10 @@
   era visible tras el menú. Verificado en `tools/audio-probe.ts`.
 - **T9.4 Look**: A/B con `?tune=` a pose fija. Se mantienen las constantes de RW (`POST`, §11): ninguna
   variante aportó y el doc es la fuente de verdad. Capturas `artifacts/fase-9-look-*.png`.
-- **T9.5 Integración**: la linterna de §9.5 (trabajo en paralelo) pasó la batería completa de F9
-  (`?torch=0/1`, `?torchshadow=1`) sin errores ni warnings, y sigue al rig del walker.
+- **T9.5 Integración**: la linterna de §9.5 pasó la batería completa de F9 (`?torch=0/1`,
+  `?torchshadow=1`) sin errores ni warnings, y sigue al rig del walker. **`F` la alterna** con la luz
+  siempre en el grafo (apagada a intensidad 0) para que no recompile materiales; `qa-session` comprueba
+  `false → true → false` y el HUD (`TORCH ON/OFF`). Captura `artifacts/torch-toggle-f.png`.
 
 ## 9.2 Criterios de aceptación
 

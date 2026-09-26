@@ -269,6 +269,20 @@ async function main(): Promise<void> {
   check('ESC abre menú y oculta HUD', esc1.menu && esc1.hud, JSON.stringify(esc1));
   check('ESC cierra menú y muestra HUD', !esc2.menu && !esc2.hud, JSON.stringify(esc2));
 
+  // Linterna: F la enciende y la apaga (la luz existe siempre; sin recompilar).
+  const torchState = async (): Promise<boolean> =>
+    page.evaluate(() => (window as unknown as { __dbg?: { torch?: { on?: boolean } } }).__dbg?.torch?.on === true);
+  const t0 = await torchState();
+  await page.keyboard.press('KeyF');
+  await sleep(250);
+  const t1 = await torchState();
+  await page.keyboard.press('KeyF');
+  await sleep(250);
+  const t2 = await torchState();
+  check('F enciende y apaga la linterna', !t0 && t1 && !t2, `${t0} → ${t1} → ${t2}`);
+  const hudTorch = await page.evaluate(() => document.getElementById('hudTorch')?.textContent ?? '');
+  check('HUD refleja la linterna', hudTorch.includes('TORCH OFF'), `«${hudTorch}»`);
+
   // --- Audio (gesto ya hecho con START) ------------------------------------
   await sleep(1500);
   const audio = await page.evaluate(() => {

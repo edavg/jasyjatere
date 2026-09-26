@@ -49,6 +49,7 @@
   #hud{position:fixed;left:10px;top:10px;z-index:40;font-size:10px;letter-spacing:.14em;color:var(--ink);opacity:.82;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.65);transition:opacity .5s}
   #hud.hidden{opacity:0}
   .hud-note{color:var(--dim);font-size:9px;letter-spacing:.1em;margin-bottom:5px}
+  #hudTorch.hud-torch-on{color:var(--acc)}
   #hudPerf{color:var(--acc);white-space:pre-line;margin:5px 0 0}
   .hud-row{display:flex;align-items:center;gap:8px;line-height:1.55}
   .hud-k{width:36px;color:var(--dim);font-size:9px}
@@ -94,6 +95,7 @@
         <span><kbd>1</kbd><kbd>2</kbd> Rain</span>
         <span><kbd>3</kbd><kbd>4</kbd> Wind</span>
         <span><kbd>-</kbd><kbd>=</kbd> Volume</span>
+        <span><kbd>F</kbd> Flashlight</span>
         <span><kbd>M</kbd> Mute</span>
         <span><kbd>P</kbd> Stats</span>
         <span><kbd>ESC</kbd> Menu</span>
@@ -106,6 +108,7 @@
   <div class="hud-row"><span class="hud-k">RAIN</span><span class="hud-bar" id="hudRainBar"></span><span class="hud-num" id="hudRainNum">0.00</span></div>
   <div class="hud-row"><span class="hud-k">WIND</span><span class="hud-bar" id="hudWindBar"></span><span class="hud-num" id="hudWindNum">0.00</span></div>
   <div id="hudVol" class="hud-note"></div>
+  <div id="hudTorch" class="hud-note">TORCH OFF</div>
   <div id="hudPerf" class="hud-note" style="display:none"></div>
 </div>
 <div id="stats"></div>

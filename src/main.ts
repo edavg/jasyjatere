@@ -295,6 +295,14 @@ menu.onStart(() => {
   running = true;
 });
 
+// F alterna la linterna (§T5.2.4.1). La luz existe siempre (ver Torch.ts), así
+// que el cambio es instantáneo y sin recompilar shaders. El HUD refleja el
+// estado leyendo `__dbg.torch`.
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyF' || !running || e.repeat) return;
+  torch.toggle();
+});
+
 // T7.2.2: ESC alterna menú/HUD. El mundo sigue animándose detrás del menú y
 // START reanuda (el rig/cámara conservan el pose). Con el menú abierto el
 // input se neutraliza (teclas limpias y pointer lock fuera).

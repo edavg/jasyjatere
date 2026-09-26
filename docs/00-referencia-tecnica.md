@@ -539,6 +539,11 @@ Decisiones que salen del bucle de captura, no de la teoría:
   en las gotas; con `gain 0` se pierde el "muro de lluvia" de RW.
 - **Sombras:** `?torchshadow=1` (opt-in, `mapSize = QUALITY[q].shadow`, capa 2 habilitada
   para que los troncos proyecten y la 1 excluida para que césped/lluvia no). Pasa extra.
+- **Interruptor `F`:** `?torch` fija el estado inicial (default apagada) y `F` la alterna en
+  runtime. La `SpotLight` existe **siempre** en el grafo (apagada = intensidad 0 y `gain` 0):
+  añadir/quitar una luz recompila las permutaciones de todos los materiales, y eso sería un
+  hitch en cada pulsación. Coste medido con `?perf=8` en `high` (SwiftShader): p50 16.7 ms
+  apagada (idéntico a no tener luz) y 16.7 ms encendida, mismos draws (21).
 
 **Trampa de medición (importantísima):** las capturas NO son reproducibles si el clima
 libre. Con relámpago activo la misma URL dio luma 174 y 90 en el mismo sitio. Para A/B

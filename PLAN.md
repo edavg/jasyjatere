@@ -99,8 +99,8 @@ node tools/shot.ts --q high --out artifacts/menu.png
 `?fog=N` · `?fogcol=r,g,b` · `?sun=N` · `?env=N` · `?post=N` · `?taa=off|traa|taau` ·
 `?view=normal|depth|velocity` · `?ao=0` · `?aoView=1` · `?gl=1` · `?fly=1` · `?nowarm=1` · `?debug=1` ·
 `?seed=<n>` · `?preset=clear|drizzle|rain|storm` · `?flash=N` · `?bolt=1|hold` · `?hud=0` · `?stats=1` ·
-`?audio=0` · `?volume=N` · `?torch=1` · `?torchi=N` (multiplicador) · `?torchangle=deg` ·
-`?torchdecay=N` · `?torchtilt=N` · `?torchshadow=1`
+`?audio=0` · `?volume=N` · `?torch=1` (estado inicial; **`F` alterna**) · `?torchi=N` (multiplicador) ·
+`?torchangle=deg` · `?torchdecay=N` · `?torchtilt=N` · `?torchshadow=1`
 
 > A/B de la linterna: fijar **siempre** `?flash=0&rain=1&wind=1.64`. Con el clima libre las
 > capturas no son reproducibles (el relámpago movió la misma escena de 174 a 90 de luma).
