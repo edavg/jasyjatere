@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>NIGHTWOODS</title>
+<meta name="description" content="A rainy wood after dark, rendered procedurally with three.js WebGPU + TSL." />
+<meta name="theme-color" content="#0b0d0f" />
+<link rel="icon" href="data:," />
+<style>
+  :root{--bg:#0b0d0f;--ink:#cfd6dc;--dim:#95a4a9;--acc:#c0a858}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace;color:var(--ink);-webkit-tap-highlight-color:transparent}
+  canvas#gl{display:block;width:100vw;height:100vh;touch-action:none}
+  #boot{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(6,10,12,.9),rgba(6,10,12,.97));transition:opacity .6s}
+  #boot.hidden{opacity:0;pointer-events:none;visibility:hidden;transition:opacity .6s,visibility 0s .6s}
+  .boot-card{width:min(420px,calc(100vw - 64px));text-align:center}
+  .boot-title{font-weight:300;letter-spacing:.42em;text-indent:.42em;font-size:18px;margin-bottom:26px}
+  #bootLabel{font-size:10px;letter-spacing:.18em;color:var(--dim);min-height:14px;margin-bottom:12px}
+  .boot-track{height:2px;background:rgba(207,214,220,.16);overflow:hidden}
+  #bootFill{height:100%;width:0%;background:linear-gradient(90deg,rgba(192,168,88,.25),var(--acc))}
+  #bootPct{margin-top:14px;font-size:10px;letter-spacing:.24em;color:var(--dim)}
+  #ui{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(6,10,12,.66),rgba(6,10,12,.85));transition:opacity .8s;overflow:auto}
+  #ui.hidden{opacity:0;pointer-events:none;visibility:hidden;transition:opacity .8s,visibility 0s .8s}
+  .card{text-align:center;max-width:1040px;padding:32px;box-sizing:border-box}
+  h1{font-weight:300;letter-spacing:.42em;text-indent:.42em;font-size:clamp(24px,3.1vw,38px);margin:0 0 16px}
+  .sub{color:var(--dim);font-size:12px;letter-spacing:.08em;line-height:1.9;margin-bottom:34px}
+  button{background:transparent;color:var(--ink);border:1px solid rgba(207,214,220,.35);padding:11px 26px;font:inherit;letter-spacing:.22em;cursor:pointer;transition:background .2s,border-color .2s}
+  button:hover{border-color:#fff}
+  button:disabled{opacity:.4;cursor:default}
+  #start{min-width:246px;min-height:47px;font-size:11px;letter-spacing:.2em;border-color:rgba(207,214,220,.65)}
+  #start:disabled{opacity:.65}
+  #backendNote{min-height:14px;margin:12px auto 0;max-width:520px;line-height:1.6;overflow-wrap:anywhere;opacity:.65;font-size:9px;letter-spacing:.05em}
+  .quality-row{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:25px}
+  .menu-label{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+  #qualOpts{margin:0;display:flex;gap:4px}
+  #qualOpts button{font-size:9px;padding:6px 10px;border-color:transparent;letter-spacing:.12em;opacity:.55}
+  #qualOpts button:hover{border-color:rgba(207,214,220,.4)}
+  #qualOpts button.sel{border-color:#fff;opacity:1}
+  .menu-help{max-width:620px;margin:24px auto 0}
+  .menu-help summary{list-style:none;cursor:pointer;font-size:10px;letter-spacing:.1em;color:var(--dim);display:inline-flex;align-items:center;gap:12px;padding:10px 18px;border:1px solid rgba(207,214,220,.4);border-radius:3px;background:rgba(207,214,220,.05);transition:background .2s,border-color .2s}
+  .menu-help summary:hover{background:rgba(207,214,220,.12);border-color:var(--ink)}
+  .menu-help summary::-webkit-details-marker{display:none}
+  .menu-help summary span{transition:transform .2s;font-size:14px}
+  .menu-help[open] summary span{transform:rotate(45deg)}
+  .keys{display:flex;flex-wrap:wrap;justify-content:center;gap:12px 20px;margin-top:17px;font-size:10px;line-height:1.7;color:var(--dim)}
+  .keys>span{display:inline-flex;align-items:center;gap:7px}
+  .keys kbd{font:inherit;font-size:9px;color:#d8e1e1;border:1px solid rgba(207,214,220,.23);border-radius:3px;padding:1px 5px}
+  #stats{position:fixed;top:10px;right:10px;font-size:11px;white-space:pre;opacity:.7;display:none;text-align:right;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.65)}
+  #hud{position:fixed;left:10px;top:10px;z-index:40;font-size:10px;letter-spacing:.14em;color:var(--ink);opacity:.82;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.65);transition:opacity .5s}
+  #hud.hidden{opacity:0}
+  .hud-note{color:var(--dim);font-size:9px;letter-spacing:.1em;margin-bottom:5px}
+  .hud-row{display:flex;align-items:center;gap:8px;line-height:1.55}
+  .hud-k{width:36px;color:var(--dim);font-size:9px}
+  .hud-bar{white-space:pre;letter-spacing:-.5px}
+  .hud-num{color:var(--dim);font-size:9px}
+  @keyframes hud-flash{0%{opacity:1}14%{opacity:.2}28%{opacity:1}42%{opacity:.2}56%{opacity:1}100%{opacity:1}}
+  .hud-flash{animation:hud-flash 1.8s ease-out}
+  #debugLog{position:fixed;left:8px;top:64px;z-index:90;max-width:min(92vw,720px);padding:6px 8px;font-size:9px;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:#ffd9c2;background:rgba(0,0,0,.6);pointer-events:none;display:none}
+  @media (max-width:700px){.card{padding:18px 14px}h1{font-size:20px;letter-spacing:.3em}.sub{font-size:10px}}
+  @media (prefers-reduced-motion:reduce){#ui,#boot,.menu-help summary span,#qualOpts button{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="boot">
+  <div class="boot-card">
+    <div class="boot-title">NIGHTWOODS</div>
+    <div id="bootLabel">starting</div>
+    <div class="boot-track"><div id="bootFill"></div></div>
+    <div id="bootPct">LOADING 0%</div>
+  </div>
+</div>
+<div id="ui" class="hidden">
+  <div class="card">
+    <h1>NIGHTWOODS</h1>
+    <div class="sub">A rainy wood after dark.<br>Everything procedural, nothing loaded.</div>
+    <button id="start" type="button" disabled>LOADING</button>
+    <div id="backendNote" role="status" aria-live="polite"></div>
+    <div class="quality-row">
+      <span class="menu-label">Quality</span>
+      <div id="qualOpts" role="group" aria-label="Visual quality">
+        <button data-q="low" type="button">LOW</button>
+        <button data-q="medium" type="button">MEDIUM</button>
+        <button data-q="high" type="button">HIGH</button>
+      </div>
+    </div>
+    <details class="menu-help">
+      <summary>Controls <span aria-hidden="true">+</span></summary>
+      <div class="keys">
+        <span><kbd>WASD</kbd> Walk</span>
+        <span><kbd>SHIFT</kbd> Run</span>
+        <span><kbd>MOUSE</kbd> Look around</span>
+        <span><kbd>1</kbd><kbd>2</kbd> Rain</span>
+        <span><kbd>3</kbd><kbd>4</kbd> Wind</span>
+        <span><kbd>-</kbd><kbd>=</kbd> Volume</span>
+        <span><kbd>M</kbd> Mute</span>
+        <span><kbd>P</kbd> Stats</span>
+        <span><kbd>ESC</kbd> Menu</span>
+      </div>
+    </details>
+  </div>
+</div>
+<div id="hud" class="hidden">
+  <div id="hudBackend" class="hud-note"></div>
+  <div class="hud-row"><span class="hud-k">RAIN</span><span class="hud-bar" id="hudRainBar"></span><span class="hud-num" id="hudRainNum">0.00</span></div>
+  <div class="hud-row"><span class="hud-k">WIND</span><span class="hud-bar" id="hudWindBar"></span><span class="hud-num" id="hudWindNum">0.00</span></div>
+  <div id="hudVol" class="hud-note"></div>
+</div>
+<div id="stats"></div>
+<div id="debugLog"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

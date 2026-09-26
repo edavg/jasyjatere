@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" href="data:," />
+<title>nightwoods · audio-probe</title>
+</head>
+<body>
+<button id="go">go</button>
+<script type="module">
+import { createAudio } from '/src/core/audio.ts';
+
+// Monkey-parche de AudioContext antes de unlock(): captura el ctx que crea
+// audio.ts y el GainNode que se conecta a destination (el bus master, primer
+// createGain del grafo). Así el probe engancha un AnalyserNode sin ampliar el
+// contrato público de audio.ts.
+const Native = window.AudioContext;
+let captured = null;
+window.AudioContext = class extends Native {
+  constructor(...args) {
+    super(...args);
+    captured = { ctx: this, gains: [], master: null };
+    const createGain = this.createGain.bind(this);
+    this.createGain = () => {
+      const g = createGain();
+      captured.gains.push(g);
+      const connect = g.connect.bind(g);
+      g.connect = (dest, ...rest) => {
+        if (dest === this.destination) captured.master = g;
+        return connect(dest, ...rest);
+      };
+      return g;
+    };
+  }
+};
+
+const audio = createAudio();
+let analyser = null;
+
+function unlock() {
+  return audio.unlock().then(ensureAnalyser);
+}
+function ensureAnalyser() {
+  if (analyser || !captured || !captured.master) return;
+  const ctx = captured.ctx;
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  const sink = ctx.createGain();
+  sink.gain.value = 0; // rama de análisis silenciosa (el master ya suena)
+  captured.master.connect(analyser);
+  analyser.connect(sink);
+  sink.connect(ctx.destination);
+}
+function update(dt, w) {
+  audio.update(dt, w);
+}
+function thunder(intensity, delay) {
+  audio.thunder(intensity, delay);
+}
+function stats() {
+  return audio.stats();
+}
+
+// Aplica `w` durante ~1 s (asentar rampas de setTargetAtTime) y mide el RMS de
+// 400 ms del master con ventanas solapadas de 2048 muestras (~43 ms).
+function analyserRms(w, ms) {
+  ensureAnalyser();
+  const data = new Float32Array(analyser.fftSize);
+  const warm = 1000;
+  const t0 = performance.now();
+  let sum = 0;
+  let n = 0;
+  const warmUntil = t0 + warm;
+  return new Promise((resolve) => {
+    const step = () => {
+      const now = performance.now();
+      update(0.02, w);
+      if (now < warmUntil) {
+        setTimeout(step, 20);
+        return;
+      }
+      analyser.getFloatTimeDomainData(data);
+      let s = 0;
+      for (let i = 0; i < data.length; i++) s += data[i] * data[i];
+      sum += Math.sqrt(s / data.length);
+      n += 1;
+      if (now - warmUntil < ms) setTimeout(step, 20);
+      else resolve(sum / n);
+    };
+    step();
+  });
+}
+
+document.getElementById('go').addEventListener('click', () => {
+  void unlock();
+});
+window.__audioProbe = { createAudio, unlock, update, thunder, stats, analyserRms };
+</script>
+</body>
+</html>

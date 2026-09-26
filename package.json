@@ -1,0 +1,22 @@
+{
+  "name": "nightwoods",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/three": "^0.186",
+    "puppeteer-core": "^25",
+    "typescript": "^5.8",
+    "vite": "^8"
+  }
+}
