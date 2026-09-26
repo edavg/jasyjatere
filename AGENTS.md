@@ -14,6 +14,7 @@ node tools/verify-fog.ts      # CPU check of fog formula
 node tools/shot.ts --q high --out artifacts/<name>.png [--url ...] [--no-start] [--wait 2500]
 node tools/qa-session.ts --seconds 180   # HUD + audio + consola limpia 3 min + dispose global
 node tools/frame-probe.ts    # estrés de streaming volando (?fly=1, puerto 5175)
+node tools/walk-probe.ts     # walker: velocidad/bob/colisión/pasos (puerto 5177)
 node tools/audio-probe.ts    # RMS de las capas de audio (puerto 5174)
 node tools/bench.ts          # fps por tier (SwiftShader, relativo) / --probe
 ```

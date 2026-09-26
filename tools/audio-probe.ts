@@ -248,6 +248,14 @@ try {
     );
   }
 
+  // F9: preset `clear` (rain=0) → puerta de silencio: las 3 capas a 0.
+  const clearRow = await measure(page, 'clear rain=0.00', { rain: 0, wind: 1.64, gust: 0.15 });
+  console.log(
+    `${clearRow.label.padEnd(30)} ${clearRow.rms.toExponential(3).padEnd(12)} ${clearRow.stats.rainLayers
+      .toFixed(4)
+      .padEnd(11)} ${clearRow.stats.windGain.toFixed(4)}`,
+  );
+
   await page.evaluate(() => {
     (window as unknown as { __audioProbe: ProbeApi }).__audioProbe.thunder(0.9, 0);
   });
@@ -288,6 +296,11 @@ try {
       'stats().rainLayers cambia con la lluvia',
       rainMax - rainMin > 0.05 && rainRows[3].stats.rainLayers > rainRows[0].stats.rainLayers,
       `min=${rainMin.toFixed(4)} max=${rainMax.toFixed(4)}`,
+    ],
+    [
+      'clear (rain=0) silencia las capas de lluvia',
+      clearRow.stats.rainLayers < 0.005,
+      `rainLayers=${clearRow.stats.rainLayers.toFixed(4)}`,
     ],
     ['sin errores de consola', consoleErrors.length === 0, `${consoleErrors.length} errores`],
   ];

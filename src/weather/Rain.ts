@@ -27,10 +27,11 @@ import {
   vec3,
 } from 'three/tsl';
 import type { Node } from 'three/webgpu';
-import { QUALITY, RAIN, type Quality } from '../core/constants';
+import { QUALITY, RAIN, TORCH, type Quality } from '../core/constants';
 import type { Dbg } from '../core/dbg';
-import { pbool, pnum } from '../core/params';
+import { pnum } from '../core/params';
 import type { Shared } from '../core/shared';
+import type { TorchEx } from '../render/Torch';
 
 declare module '../core/dbg' {
   interface Dbg {
@@ -46,8 +47,10 @@ declare module '../core/dbg' {
  * levante. Cero allocs por frame: `update()` copia la posición de cámara.
  *
  * Adaptación nocturna (T5.2.4, RW ilumina con faros de coche):
- *  1. cono de linterna (`headlit`, `?torch=1`, default off) que ilumina las
- *     rachas/salpicaduras dentro del cono cámara→forward;
+ *  1. cono de linterna (`torch.beamAt`, `?torch=1`, default off) que ilumina las
+ *     rachas/salpicaduras dentro del haz; la linterna real es el `SpotLight` de
+ *     `render/Torch.ts`, así que el agua y el terreno se ven iluminados por lo
+ *     mismo (el shader solo hace el término que `MeshBasicNodeMaterial` no puede);
  *  2. brillo lunar `pow(max(dot(V, uMoonDir), 0), 8)` sumado al color: sin él
  *     la lluvia se pierde en el cielo negro;
  *  3. realce pálido `mix(..., (0.85,0.87,0.9), wet*0.6)` de §9.2;
@@ -55,27 +58,21 @@ declare module '../core/dbg' {
  */
 export interface RainEx {
   group: THREE.Group;
-  /** Solo uniforms. `camDir` (opcional) orienta la linterna. Cero allocs. */
-  update(camPos: THREE.Vector3, camDir?: THREE.Vector3): void;
+  /** Solo uniforms. La linterna los escribe `torch.update()`. Cero allocs. */
+  update(camPos: THREE.Vector3): void;
   dispose(): void;
 }
 
 // Colores §9/T5.2.4 (lineales, HDR). El pálido de punta es literal de §9.2;
-// el de luna copia el halo de §3, con ganancia ajustada en capturas.
+// el de luna copia el halo de §3, con ganancia ajustada en capturas. El color y
+// el cono de la linterna viven en TORCH (constants.ts) y llegan por `torch`.
 const PALE = [0.85, 0.87, 0.9] as const;
 const MOON_COLOR = [0.55, 0.62, 0.8] as const;
-const TORCH_COLOR = [1.0, 0.93, 0.78] as const;
 const SPLASH_COLOR = [0.85, 0.9, 1.0] as const;
-/** Cono de linterna: cos(12°) interior / cos(22°) exterior (T5.2.4.1). */
-const TORCH_COS_IN = 0.978;
-const TORCH_COS_OUT = 0.925;
-/** Caída de linterna 1/(1+d²·k): 0.71 a 10 m, 0.38 a 20 m. */
-const TORCH_FALLOFF = 0.004;
 /** Ganancia del brillo lunar sobre la lluvia (≈ ×2 para verse de noche). */
 const MOON_SHEEN_GAIN = 2.0;
 /** Salpicaduras: color base elevado para el bloom de F6 (§T5.2.4.5). */
 const SPLASH_GAIN = 5.0;
-const SPLASH_TORCH_GAIN = 2.5;
 /** `y = height + 0.015` (§9.3): por encima del terreno, sin z-fighting. */
 const SPLASH_LIFT = 0.015;
 
@@ -83,7 +80,12 @@ function dbgRef(): Dbg | null {
   return (window as unknown as { __dbg?: Dbg }).__dbg ?? null;
 }
 
-export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality): RainEx {
+export function createRain(
+  scene: THREE.Scene,
+  shared: Shared,
+  quality: Quality,
+  torch: TorchEx,
+): RainEx {
   const counts = QUALITY[quality].rain;
   const group = new THREE.Group();
   group.name = 'rain';
@@ -93,7 +95,7 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
   const off = pnum('rain', 1) <= 0;
   if (off) {
     // ?rain=0: ni mallas ni draw calls (A/B de las capturas). Weather pone GB=0.
-    if (dbg) dbg.rain = { off: true, streaks: 0, splashes: 0, torch: false };
+    if (dbg) dbg.rain = { off: true, streaks: 0, splashes: 0, torch: torch.on };
     return {
       group,
       update: () => {},
@@ -103,24 +105,9 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
     };
   }
 
-  // Uniforms locales (no están en el contrato `shared`): cámara para el `fold`
-  // y linterna. La posición de la linterna = cámara; la dirección, forward.
+  // Uniforms locales (no están en el contrato `shared`): cámara para el `fold`.
+  // Los de la linterna los posee `render/Torch.ts` (los comparte con la niebla).
   const uCam = uniform(new THREE.Vector3());
-  const uTorchPos = uniform(new THREE.Vector3());
-  const uTorchDir = uniform(new THREE.Vector3(0, 0, -1));
-  const uTorchOn = uniform(pbool('torch', false) ? 1 : 0);
-
-  /**
-   * `headlit(wp)`: cono de linterna 0..1 en `wp` (§T5.2.4.1). Sustituye al
-   * `headlight` de RW en opacidad y color. Sin allocs (grafo TSL).
-   */
-  const headlit = (wp: Node<'vec3'>): Node<'float'> => {
-    const toP = wp.sub(uTorchPos);
-    const d = length(toP);
-    const cone = smoothstep(TORCH_COS_OUT, TORCH_COS_IN, dot(normalize(toP), uTorchDir));
-    const fall = float(1).div(d.mul(d).mul(TORCH_FALLOFF).add(1));
-    return cone.mul(fall).mul(uTorchOn);
-  };
 
   /** PCG de §9.2: `hash(instanceIndex*4 + k + 17)` (acepta uint directamente). */
   const hasher = (k: number): Node<'float'> =>
@@ -191,7 +178,7 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
     const borderX = smoothstep(0, 0.5, uv2.x).mul(smoothstep(0.5, 1, uv2.x).oneMinus());
     const borderY = smoothstep(0, 0.12, uv2.y).mul(smoothstep(0.88, 1, uv2.y).oneMinus());
     const dist = length(uCam.sub(positionWorld));
-    const lit = headlit(positionWorld);
+    const lit = torch.beamAt(positionWorld);
     const opacity = borderX
       .mul(borderY)
       .mul(smoothstep(0.3, 1.8, dist))
@@ -215,7 +202,7 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
     );
     material.colorNode = baseColor
       .mul(shared.uNightDim)
-      .add(vec3(TORCH_COLOR[0], TORCH_COLOR[1], TORCH_COLOR[2]).mul(lit).mul(2.2))
+      .add(vec3(TORCH.color[0], TORCH.color[1], TORCH.color[2]).mul(lit).mul(TORCH.streakGain))
       .add(moonSheen.mul(MOON_SHEEN_GAIN));
 
     return material;
@@ -279,7 +266,7 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
     const ring = smoothstep(0.55, 0.8, rV).mul(smoothstep(0.86, 1, rV).oneMinus());
     const center = smoothstep(0, 0.35, rV).oneMinus().mul(0.7);
     const dist = length(uCam.sub(positionWorld));
-    const lit = headlit(positionWorld);
+    const lit = torch.beamAt(positionWorld);
     material.opacityNode = ring
       .add(center)
       .mul(fadeV)
@@ -295,7 +282,7 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
     material.colorNode = vec3(SPLASH_COLOR[0], SPLASH_COLOR[1], SPLASH_COLOR[2])
       .mul(SPLASH_GAIN)
       .mul(shared.uNightDim)
-      .add(vec3(TORCH_COLOR[0], TORCH_COLOR[1], TORCH_COLOR[2]).mul(lit).mul(SPLASH_TORCH_GAIN))
+      .add(vec3(TORCH.color[0], TORCH.color[1], TORCH.color[2]).mul(lit).mul(TORCH.splashGain))
       .add(vec3(MOON_COLOR[0], MOON_COLOR[1], MOON_COLOR[2]).mul(moonSheen).mul(0.8));
 
     return material;
@@ -331,15 +318,14 @@ export function createRain(scene: THREE.Scene, shared: Shared, quality: Quality)
       splashes: counts.splashes,
       box: [...RAIN.box],
       splashBox: RAIN.splashBox,
-      torch: uTorchOn.value > 0,
+      torch: torch.on,
     };
   }
 
-  function update(camPos: THREE.Vector3, camDir?: THREE.Vector3): void {
+  function update(camPos: THREE.Vector3): void {
     // Lo único que se escribe por frame: uniforms (cero allocs, cero buffers).
+    // La linterna no está aquí: sus tres uniforms los escribe `torch.update()`.
     uCam.value.copy(camPos);
-    uTorchPos.value.copy(camPos);
-    if (camDir !== undefined) uTorchDir.value.copy(camDir).normalize();
   }
 
   function dispose(): void {

@@ -1,8 +1,9 @@
 import * as THREE from 'three/webgpu';
-import { cameraPosition, clamp, exp, fog, length, max, positionWorld, smoothstep } from 'three/tsl';
-import { FOG } from '../core/constants';
+import { cameraPosition, clamp, exp, fog, length, max, positionWorld, smoothstep, vec3 } from 'three/tsl';
+import { FOG, TORCH } from '../core/constants';
 import { pnum, pstr } from '../core/params';
 import type { Shared } from '../core/shared';
+import type { TorchEx } from './Torch';
 
 export interface FogEx {
   /** Nodo fog(color, factor) listo para scene.fogNode. */
@@ -14,7 +15,7 @@ export interface FogEx {
 /** @types/three 0.186 no declara Scene.fogNode, pero r186 lo lee (three.webgpu.js:58077). */
 type SceneFogHost = THREE.Scene & { fogNode?: unknown };
 
-export function createFog(shared: Shared): FogEx {
+export function createFog(shared: Shared, torch: TorchEx): FogEx {
   // ?fog=N escala zB; ?fogcol=r,g,b sustituye VB (si el parseo falla, quedan los defaults).
   shared.uFogDensity.value = FOG.density * pnum('fog', 1);
   const fogcol = pstr('fogcol', '');
@@ -47,9 +48,15 @@ export function createFog(shared: Shared): FogEx {
   const y = smoothstep(shared.uFogNearFar.x, shared.uFogNearFar.y, f);
   const factor = clamp(max(h.oneMinus().mul(v.oneMinus()).oneMinus(), y), 0, 1);
 
+  // Dispersión del haz: en RW los faros se ven en el aire (lluvia en el cono).
+  // Aquí el mismo `beamAt` que usa la lluvia tiñe la niebla de ámbar dentro del
+  // haz; con la linterna apagada vale 0 y la niebla queda igual que antes.
+  const beam = torch.beamAt(positionWorld);
+
   const color = shared.uHorizonColor
     .mul(smoothstep(-0.12, 0.45, p).mul(0.5).add(0.85))
-    .mul(shared.uFlash.mul(2.2).add(1));
+    .mul(shared.uFlash.mul(2.2).add(1))
+    .add(vec3(TORCH.color[0], TORCH.color[1], TORCH.color[2]).mul(beam).mul(TORCH.fogGain));
 
   const node = fog(color, factor);
 

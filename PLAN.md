@@ -23,6 +23,9 @@ algoritmos decodificados del bundle de producción de Rainy Worlds.
 | [fase-5-lluvia-clima-rayos.md](docs/fase-5-lluvia-clima-rayos.md) | Rachas/salpicaduras con wrap de volumen, relámpagos, adaptación nocturna sin faros |
 | [fase-6-post.md](docs/fase-6-post.md) | Cadena TSL: GTAO → TAA → bloom → motion blur → AgX → grade → CA/viñeta/grano |
 | [fase-7-cierre.md](docs/fase-7-cierre.md) | Calidad persistente, HUD, audio ambiente, QA y performance |
+| [fase-8-walker.md](docs/fase-8-walker.md) | **Post-v1**: walker en primera persona (física §1, colisión, bob, pasos) |
+| [fase-9-hardware.md](docs/fase-9-hardware.md) | **Post-v1**: bench in-app `?perf=N`, QA en GPU real, pulido |
+| [qa-hardware.md](docs/qa-hardware.md) | Protocolo de verificación en hardware real |
 | [PROMPT-EJECUCION.md](PROMPT-EJECUCION.md) | **Prompt maestro** para ejecutar las fases con subagentes |
 
 ---
@@ -96,7 +99,12 @@ node tools/shot.ts --q high --out artifacts/menu.png
 `?fog=N` · `?fogcol=r,g,b` · `?sun=N` · `?env=N` · `?post=N` · `?taa=off|traa|taau` ·
 `?view=normal|depth|velocity` · `?ao=0` · `?aoView=1` · `?gl=1` · `?fly=1` · `?nowarm=1` · `?debug=1` ·
 `?seed=<n>` · `?preset=clear|drizzle|rain|storm` · `?flash=N` · `?bolt=1|hold` · `?hud=0` · `?stats=1` ·
-`?audio=0` · `?volume=N`
+`?audio=0` · `?volume=N` · `?torch=1` · `?torchi=N` (multiplicador) · `?torchangle=deg` ·
+`?torchdecay=N` · `?torchtilt=N` · `?torchshadow=1`
+
+> A/B de la linterna: fijar **siempre** `?flash=0&rain=1&wind=1.64`. Con el clima libre las
+> capturas no son reproducibles (el relámpago movió la misma escena de 174 a 90 de luma).
+> Ver `docs/00-referencia-tecnica.md` §9.5.
 
 ## Convenciones de captura
 

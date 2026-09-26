@@ -90,6 +90,7 @@ export function createHud(deps: HudDeps): Hud {
   const windBar = need<HTMLSpanElement>('hudWindBar');
   const windNum = need<HTMLSpanElement>('hudWindNum');
   const volEl = need<HTMLDivElement>('hudVol');
+  const perfEl = need<HTMLDivElement>('hudPerf');
   const statsEl = need<HTMLDivElement>('stats');
   const logEl = document.getElementById('debugLog');
   const debug = pbool('debug', false);
@@ -108,6 +109,7 @@ export function createHud(deps: HudDeps): Hud {
   let rainCells = -1;
   let windCells = -1;
   let volKey = -1;
+  let perfShown: unknown = null;
 
   function setVisible(v: boolean): void {
     visible = v;
@@ -142,6 +144,15 @@ export function createHud(deps: HudDeps): Hud {
       windNum.textContent = fmt(w);
       flash(windBar);
     }
+    // F9: resultado de ?perf=N (una sola vez; se compara por referencia).
+    if (dbg.perf !== undefined && dbg.perf !== perfShown) {
+      perfShown = dbg.perf;
+      const p = dbg.perf;
+      perfEl.style.display = 'block';
+      perfEl.textContent = `PERF ${p.fps} fps · p50 ${fmt(p.p50)} · p95 ${fmt(p.p95)} · max ${fmt(p.max)} ms\n${p.quality} · ${p.backend} · dpr ${fmt(p.dpr)} · ${p.frames} frames`;
+      flash(perfEl);
+    }
+
     // Clave numérica: volumen + flags en un solo entero (el texto solo se
     // recompone cuando cambia algo, no cada frame).
     const vp = Math.round(audio.volume * 100);

@@ -104,6 +104,7 @@ Esqueleto del proyecto horror (buses master/sfx/music, `ensure()`, `tone()`, `no
 | 5 | Lluvia + salpicaduras + relámpagos | lluvia visible de noche, trueno |
 | 6 | Cadena de post TSL completa | look correcto, sin doble tonemap, `?post/view` |
 | 7 | Calidad + HUD + audio + QA | 60fps high, consola limpia, capturas |
+| 8 | (post-v1) Walker + colisión + pasos | física §1, `walk-probe`, capturas |
 
 ---
 

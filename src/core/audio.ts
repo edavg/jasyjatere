@@ -31,12 +31,16 @@ export interface AudioStats {
   windGain: number;
   thunderActive: number;
   burstMs: number;
+  /** Pasos sintetizados disparados (F8). */
+  steps: number;
 }
 
 export interface AudioEx {
   unlock(): Promise<void>;
   update(dt: number, w: AudioWeather): void;
   thunder(intensity: number, delay: number): void;
+  /** Paso sintetizado del walker (F8): ruido corto filtrado. */
+  step(run: boolean): void;
   setVolume(v: number): void;
   setMuted(m: boolean): void;
   toggleMute(): boolean;
@@ -61,10 +65,12 @@ const RAIN_CENTER = [0.35, 1.0, 1.75] as const;
  * audible), la aguda se ensancha para que la lluvia fuerte conserve cuerpo. */
 const RAIN_SIGMA = [0.5, 0.55, 0.6] as const;
 /** Exponente de la curva de potencia (max(rain,.05)/1.5)^.55 de §T7.2.3. El
- * suelo .05 es de la spec: evita pow(0) y deja una cama mínima (~15 % de la
- * curva) incluso con rain=0; con rain=0.05 ambas dan lo mismo. Si algún día se
- * quiere silencio absoluto en `clear`, multiplicar por smoothstep(0, 0.05, rain). */
+ * suelo .05 es de la spec: evita pow(0). F9: se añade la puerta
+ * `smoothstep(0, 0.05, rain)` que el texto de la spec dejaba como opción, para
+ * que el preset `clear` (rain=0) sea silencio real y no una cama audible. */
 const RAIN_POW = 0.55;
+/** Ancho de la puerta de silencio de la lluvia (GB). */
+const RAIN_GATE = 0.05;
 /** Paseo aleatorio del jitter ±6 % sobre ganancia y frecuencia del filtro de
  * cada capa: nuevo objetivo cada 0.35–1.2 s (nunca un valor nuevo por frame). */
 const JITTER = 0.06;
@@ -96,6 +102,13 @@ const CLOSE_THUNDER = 0.6;
 const SEED_BUFFER = 3301;
 const SEED_JITTER = 3307;
 const SEED_BURST = 3313;
+const SEED_STEP = 3319;
+/** Paso sintetizado (F8): bandpass grave + lowpass, envolvente ~90 ms. */
+const STEP_BP_WALK = 170;
+const STEP_BP_RUN = 220;
+const STEP_PEAK_WALK = 0.1;
+const STEP_PEAK_RUN = 0.16;
+const STEP_LIFE = 0.11;
 const VOLUME_KEY = 'nightwoods-volume';
 const DEFAULT_VOLUME = 0.7;
 
@@ -143,6 +156,7 @@ export function createAudio(): AudioEx {
   const bufRng = mulberry32(seed + SEED_BUFFER);
   const jitterRng = mulberry32(seed + SEED_JITTER);
   const burstRng = mulberry32(seed + SEED_BURST);
+  const stepRng = mulberry32(seed + SEED_STEP);
 
   let volume = Number.isFinite(volumeParam) ? clamp(volumeParam, 0, 1) : storedVolume();
   let mutedFlag = false;
@@ -179,6 +193,7 @@ export function createAudio(): AudioEx {
   const timers: number[] = [];
   let burstActive = 0;
   let burstMs = 0;
+  let steps = 0;
 
   function ensure(): AudioContext {
     if (ctx) return ctx;
@@ -381,6 +396,54 @@ export function createAudio(): AudioEx {
   }
 
   /**
+   * Paso sintetizado (F8): ruido corto → lowpass → bandpass grave (~170 Hz
+   * marcha / ~220 Hz carrera) con envolvente exponencial de ~90 ms y jitter
+   * ±20 % en pico/filtros para no sonar a metralleta. Asignación puntual
+   * (pasos a ~2 Hz de media, nunca por frame).
+   */
+  function step(run: boolean): void {
+    const c = ctx;
+    if (!c || disposed || !sfx || !noise) return;
+    const t0 = c.currentTime + 0.005;
+    const src = c.createBufferSource();
+    src.buffer = noise;
+    src.loop = false;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900 + stepRng() * 500;
+    lp.Q.value = 0.6;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = (run ? STEP_BP_RUN : STEP_BP_WALK) * (0.9 + stepRng() * 0.2);
+    bp.Q.value = 1.1;
+    const g = c.createGain();
+    const peak = (run ? STEP_PEAK_RUN : STEP_PEAK_WALK) * (0.8 + stepRng() * 0.4);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + STEP_LIFE);
+    g.gain.setValueAtTime(0, t0 + STEP_LIFE + 0.01);
+    src.connect(lp);
+    lp.connect(bp);
+    bp.connect(g);
+    g.connect(sfx);
+    src.start(t0, stepRng() * NOISE_SECONDS);
+    src.stop(t0 + STEP_LIFE + 0.02);
+    steps += 1;
+    const id = window.setTimeout(() => {
+      try {
+        src.stop();
+      } catch {
+        /* ya parado */
+      }
+      src.disconnect();
+      lp.disconnect();
+      bp.disconnect();
+      g.disconnect();
+    }, 400);
+    timers.push(id);
+  }
+
+  /**
    * Cero asignaciones: solo `setTargetAtTime` sobre params preasignados y el
    * paseo del jitter (arrays fijos). Las ganancias jittereadas se guardan en
    * `layerOut`/`windOut` para que `stats()` no lea el grafo.
@@ -393,6 +456,9 @@ export function createAudio(): AudioEx {
 
     const now = ctx.currentTime;
     const rainPow = Math.pow(Math.max(rain, 0.05) / 1.5, RAIN_POW);
+    // Puerta de silencio: `clear` (rain=0) no debe dejar cama de ruido.
+    const t = Math.min(1, Math.max(0, rain / RAIN_GATE));
+    const gate = t * t * (3 - 2 * t);
     for (let i = 0; i < 3; i++) {
       jitterTimer[i] -= dt;
       if (jitterTimer[i] <= 0) {
@@ -401,7 +467,7 @@ export function createAudio(): AudioEx {
       }
       const d = (rain - RAIN_CENTER[i]) / RAIN_SIGMA[i];
       const bell = Math.exp(-0.5 * d * d);
-      const out = bell * rainPow * jitterTarget[i];
+      const out = bell * rainPow * gate * jitterTarget[i];
       layerOut[i] = out;
       layerGain[i].gain.setTargetAtTime(out, now, TAU_RAIN);
       layerFilter[i].frequency.setTargetAtTime(RAIN_FREQ[i] * jitterTarget[i], now, TAU_RAIN);
@@ -441,6 +507,7 @@ export function createAudio(): AudioEx {
       windGain: windOut,
       thunderActive: burstActive,
       burstMs,
+      steps,
     };
   }
 
@@ -473,6 +540,7 @@ export function createAudio(): AudioEx {
     noise = null;
     burstActive = 0;
     burstMs = 0;
+    steps = 0;
     if (ctx) {
       void ctx.close().catch(() => undefined);
       ctx = null;
@@ -484,6 +552,7 @@ export function createAudio(): AudioEx {
     unlock,
     update,
     thunder,
+    step,
     setVolume,
     setMuted,
     toggleMute,

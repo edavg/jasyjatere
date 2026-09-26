@@ -463,6 +463,8 @@ renderOrder 20, transparent, depthWrite false, layers 1
 - `wet = iV` (precipitación, `.7` en pas; nosotros 1.0 por defecto). `nightDim = XB` = `.12` en noche.
 - **Adaptación nocturna (obligatoria, ver fase 5):** RW ilumina con faros de coche. Aquí sustituimos
   `headlight` por un cono de linterna del jugador y un brillo lunar `pow(max(dot(V,moonDir),0),8)`.
+  Los faros son REALES (los del auto de RW los dibuja el renderer); aquí los sustituye una
+  `SpotLight` en el rig + este mismo cono en el shader. Ver §9.5.
 
 ### 9.3 Salpicaduras
 ```
@@ -484,6 +486,64 @@ y = height(x,z) + 0.015 ; renderOrder 19
 //   extrusión = cross(segDir, normalize(origin-p)) * width*(1 - r/len*.5) ; renderOrder 15
 //   color (18,19,24), opacity = clamp(flash*6, 0, 1)
 ```
+
+### 9.5 Linterna en primera persona (sustituye a los faros del coche)
+
+Observado en `https://rainyworlds.com/?q=medium&scene=drive` (nada de código: solo
+capturas headless del resultado renderizado). RW ilumina la noche con **los faros del
+coche**: un cono ancho y cálido pegado a la cámara, con el borde muy suave, el centro
+quemado por el bloom, el tronco iluminado a 3 m (blanco puro) y la **lluvia dentro del
+cono claramente iluminada** — el haz se ve porque la lluvia y la bruma lo dispersan.
+Sin ellos la escena es un BOSQUE NEGRO: es la decisión de arte que hace legible el
+`drive` (y el mismo razonamiento aplica a `woods`).
+
+Aquí **no hay coche**: el mismo haz va montado en el rig de la cámara (una linterna en
+la mano derecha) y lo gobierna `src/render/Torch.ts`, que es la **única fuente** del
+haz: la `SpotLight` real (ilumina terreno, árboles, césped y props, que son
+`MeshStandardNodeMaterial`) y los tres uniforms que leen los shaders de lluvia y niebla.
+
+```ts
+// src/render/Torch.ts  (?torch=0 por defecto: sin luz no hay permutación de shader)
+const light = new THREE.SpotLight(color, intensity, distance, angle, penumbra, decay);
+light.position.set(0.22, -0.14, 0);        // offset de la mano (rig local)
+light.target.position.set(0.22, -0.14 - tilt, -1);  // hijo del MISMO rig: yaw/pitch gratis
+rig.add(light); rig.add(light.target);    // el target debe estar en el grafo
+
+// cono que comparten lluvia y niebla (sin allocs, grafo TSL)
+const toP = wp.sub(uPos); const d = length(toP);
+cone = smoothstep(0.925, 0.978, dot(normalize(toP), uDir));   // 22°..12°
+fall = 1 / (1 + d*d*0.004);                                    // 0.71@10 m, 0.38@20 m
+beam = cone * fall * gain;
+```
+
+Constantes (viven en `TORCH`, `src/core/constants.ts`; nunca en el shader):
+`color (1.0,0.84,0.60)` lineal ≈3000 K · `angle 0.68` (39° medios) · `penumbra 0.7` ·
+`distance 70` · `intensity 48` cd · `decay 1.0` · `tilt 0` · `fogGain 0.35`.
+
+Decisiones que salen del bucle de captura, no de la teoría:
+
+- **`decay 1.0`, no el 2 físico.** Un faro es un haz colimado, no una vela. Con
+  `decay 2` el haz muere a 12 m y los árboles a 20 m quedan negros; con 1.0 el wash
+  llega a 30 m como en RW. `?torchdecay=N` (exponente) y `?torchi=N` (**multiplicador**
+  de intensidad, no absoluto) permiten el barrido.
+- **`tilt 0`.** Se probó inclinar el haz hacia abajo para alejar el punto caliente de
+  los pies: no aporta. El cono se abre *más* cerca (el borde inferior es `tilt+ángulo`),
+  así que el primer plano se quema igual y de paso se pierde el suelo intermedio.
+  `?torchtilt=N` (caída por metro de alcance) queda para FUTURO, no para el default.
+- **Perfil medido** (luminancia media de una banda central, `artifacts/torch-on*.png`):
+  `28/34/37/40` a 20/12/8/6 m y `72-98` en el primer plano (suelo a 3 m). Es lo más
+  cercano al wash de RW que se puede comparar: el de RW está medido desde el asiento a
+  12 km/h con el capó tapando el suelo cercano, así que la comparación fila a fila
+  engaña; lo que se copia es la **forma** (lejos 30-40, medio 55-85, cerca sin clipping).
+- **Niebla:** `fog(color + TORCH.color*beam*fogGain, factor)`. Sin esto el haz solo se ve
+  en las gotas; con `gain 0` se pierde el "muro de lluvia" de RW.
+- **Sombras:** `?torchshadow=1` (opt-in, `mapSize = QUALITY[q].shadow`, capa 2 habilitada
+  para que los troncos proyecten y la 1 excluida para que césped/lluvia no). Pasa extra.
+
+**Trampa de medición (importantísima):** las capturas NO son reproducibles si el clima
+libre. Con relámpago activo la misma URL dio luma 174 y 90 en el mismo sitio. Para A/B
+fijar siempre `?flash=0&rain=1&wind=1.64`; con eso dosRuns dan una diferencia media de
+1.4/255 y el `frame` es idéntico.
 
 ---
 
@@ -563,9 +623,9 @@ nightwoods/
 ├── package.json  vite.config.ts  tsconfig.json
 ├── src/
 │   ├── main.ts                # arranque + bucle + params URL
-│   ├── core/{constants,rng,input}.ts
+│   ├── core/{constants,rng,input,dbg,params,shared,perf}.ts
 │   ├── assets/{index,noise,textures,env}.ts
-│   ├── render/{RenderCore,Environment,Sky,Fog,Post}.ts
+│   ├── render/{RenderCore,Environment,Sky,Fog,Post,Torch}.ts
 │   ├── world/{index,Heightfield,Terrain,Grass,Trees,Props,Scatter,Water}.ts
 │   ├── weather/{Rain,Lightning,Weather}.ts
 │   └── ui/{boot,menu,hud}.ts
